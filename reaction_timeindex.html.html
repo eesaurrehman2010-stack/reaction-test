@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reaction Time Test</title>
+<style>
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+  body { 
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+    font-family: sans-serif; 
+    flex-direction: column; 
+    position: relative;
+  }
+  #circle { 
+    border-radius: 50%; 
+    position: absolute; 
+    cursor: pointer; 
+    display: none; 
+  }
+  #countdown { font-size: 2rem; margin-bottom: 20px; }
+  #feedback { margin-top: 10px; font-size: 1.2rem; }
+  #summary { margin-top: 30px; font-size: 1.2rem; }
+  #startScreen { display: flex; flex-direction: column; align-items: center; }
+  #startScreen input { font-size: 1.2rem; padding: 5px; margin-bottom: 10px; }
+  #startScreen button { font-size: 1.2rem; padding: 5px 15px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div id="startScreen">
+  <h2>Enter your name to start</h2>
+  <input type="text" id="participantName" placeholder="Your name">
+  <button id="startBtn">Start</button>
+</div>
+
+<div id="countdown"></div>
+<div id="feedback"></div>
+<div id="summary"></div>
+<div id="circle"></div>
+
+<script>
+const colors = ["red","blue","green","yellow","purple"];
+const trialsPerColor = 4;
+let trials = [];
+colors.forEach(color => {
+  for(let i=0;i<trialsPerColor;i++){
+    trials.push(color);
+  }
+});
+trials = shuffleArray(trials);
+
+let currentTrial = 0;
+let startTime;
+let reactionTimes = [];
+let participantName = "";
+
+const circle = document.getElementById("circle");
+const countdownEl = document.getElementById("countdown");
+const feedbackEl = document.getElementById("feedback");
+const summaryEl = document.getElementById("summary");
+const startScreen = document.getElementById("startScreen");
+const startBtn = document.getElementById("startBtn");
+const nameInput = document.getElementById("participantName");
+
+const circleSize = window.innerWidth < 600 ? 120 : 80; // mobile vs desktop
+circle.style.width = circle.style.height = circleSize + "px";
+
+function startTest() {
+  const name = nameInput.value.trim();
+  if(name === ""){
+    alert("Please enter your name to start.");
+    return;
+  }
+  participantName = name;
+  startScreen.style.display = "none";
+  showCountdown(showCircle);
+}
+
+// Listen to both click and touchstart for mobile compatibility
+startBtn.addEventListener("click", startTest);
+startBtn.addEventListener("touchstart", startTest);
+
+function shuffleArray(arr){
+  for(let i = arr.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function showCountdown(callback){
+  let count = 3;
+  countdownEl.textContent = count;
+  const interval = setInterval(()=>{
+    count--;
+    if(count > 0){
+      countdownEl.textContent = count;
+    } else {
+      clearInterval(interval);
+      countdownEl.textContent = "";
+      callback();
+    }
+  }, 1000);
+}
+
+function showCircle(){
+  const color = trials[currentTrial];
+  circle.style.backgroundColor = color;
+
+  const bodyRect = document.body.getBoundingClientRect();
+  const maxTop = bodyRect.height - circleSize - 10;
+  const maxLeft = bodyRect.width - circleSize - 10;
+
+  circle.style.top = 10 + Math.random() * maxTop + "px";
+  circle.style.left = 10 + Math.random() * maxLeft + "px";
+  
+  circle.style.display = "block";
+  startTime = performance.now();
+}
+
+circle.addEventListener("click", ()=>{
+  const reactionTime = performance.now() - startTime;
+  const color = trials[currentTrial];
+  reactionTimes.push({name: participantName, color, time: reactionTime});
+  feedbackEl.textContent = `Reaction time: ${Math.round(reactionTime)} ms`;
+  circle.style.display = "none";
+  currentTrial++;
+  if(currentTrial < trials.length){
+    setTimeout(()=> showCountdown(showCircle), 500); // 0.5s break before next trial
+  } else {
+    showSummary();
+    sendDataToSheet();
+  }
+});
+
+function showSummary(){
+  const colorStats = {};
+  colors.forEach(color => {
+    const times = reactionTimes.filter(r => r.color === color).map(r=>r.time);
+    const avg = times.reduce((a,b)=>a+b,0)/times.length;
+    colorStats[color] = Math.round(avg);
+  });
+  summaryEl.innerHTML = "<h3>Average reaction time per color:</h3>" +
+    Object.entries(colorStats).map(([color,time])=>`${color}: ${time} ms`).join("<br>");
+}
+
+function sendDataToSheet(){
+  fetch("https://script.google.com/macros/s/AKfycbzuKfcGIbOhO4d5SRAEeCmP92Ojnkug6ziWFx403Y1HEjDC9AHZo0k0AR_VszZElXeYrw/exec", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(reactionTimes)
+  });
+}
+</script>
+</body>
+</html>
